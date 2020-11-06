@@ -8,10 +8,9 @@
 
 两个方法均调用了`public static <T> Stream<T> stream(Spliterator<T> spliterator, boolean parallel)` 该方法根据第二个入参的值来选择是否返回并行的流还是串行的流。
 
-> spliterator – a Spliterator describing the stream elements
 > parallel – if true then the returned stream is a parallel stream; if false the returned stream is a sequential stream.
->
-> spliterator –一个并行描述流元素的Spliterator-如果为true，则返回的流为并行流；如果为false，则返回的流是顺序流。
+> 
+>parallel –如果为true，则返回的流为并行流；如果为false，则返回的流是顺序流。
 
 这是该参数的文档解释.
 
@@ -67,9 +66,9 @@ public class Main {
 
 可以看到使用不同的流模式，最终代码的执行时间也是不一样的。
 
-写道这里并行流和串行流最直观的区别也展现出来了，接下来要做的就是去深扒他的裤子 看看它的原理。
+写道这里并行流和串行流最直观的区别也展现出来了，接下来要做的就是去深扒他的裤子，去深究他为什么可以这么快。
 
-在并行流中最重要最关键的就是使用了 Fork/Join框架
+原来是因为在并行流中使用了Fork/Join并发框架
 
 > fork操作的作用是把一个大的问题划分成若干个较小的问题。在这个划分过程一般是递归进行的。直到可以直接进行计算。需要恰当地选取子问题的大小。太大的子问题不利于通过并行方式来提高性能，而太小的子问题则会带来较大的额外开销。每个子问题计算完成后，可以得到关于整个问题的部分解。join操作的作用是把这些分解手机组织起来，得到完整解。
 >
