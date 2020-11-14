@@ -27,34 +27,40 @@
 我们用一个代码来展示
 
 ```java
-package org.example;
+package cn.celess.java.util;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 import java.util.stream.Stream;
 
-
 /**
- * @author zheng
+ * @author : xiaohai
+ * @date : 2020/11/15 0:13
+ * @desc : collection 中 stream流 的测试
  */
-public class Main {
+public class CollectionStream {
+
     public static void main(String[] args) {
         List<Integer> integerList = new ArrayList<>();
 
-        for (int i = 0; i < 100000; i++) {
+        for (int i = 0; i < 10000000; i++) {
             integerList.add(i + 1);
         }
+
+        integerList.sort((a, b) -> (a - b) * (new Random().nextBoolean() ? 1 : -1));
 
         Stream<Integer> sequentialStream = integerList.stream();
         Stream<Integer> parallelStream = integerList.parallelStream();
 
-        Long time = System.currentTimeMillis();
-        Stream<Integer> sorted = sequentialStream.sorted((a, b) -> b - a);
-        System.out.println(sorted.findFirst().get());
+        long time = System.currentTimeMillis();
+        System.out.print(parallelStream.reduce(0, Integer::max));
+        System.out.println("\t\t\t是否并行：" + parallelStream.isParallel());
         System.out.println("并行找最大值耗时" + (System.currentTimeMillis() - time) + "ms");
 
-        Long time2 = System.currentTimeMillis();
-        Stream<Integer> sorted2 = parallelStream.sorted((a, b) -> b - a);
-        System.out.println(sorted2.findFirst().get());
+        long time2 = System.currentTimeMillis();
+        System.out.print(sequentialStream.reduce(0, Integer::max));
+        System.out.println("\t\t\t是否并行：" + sequentialStream.isParallel());
         System.out.println("串行找最大值耗时" + (System.currentTimeMillis() - time2) + "ms");
     }
 }
