@@ -68,7 +68,7 @@ public class CollectionStream {
 
 运行结果
 
-![image-20201104001536454](pic/Collection/image-20201104001536454.png)
+![image-20201115003208102](pic/Collection/image-20201115003208102.png)
 
 可以看到使用不同的流模式，最终代码的执行时间也是不一样的。
 
