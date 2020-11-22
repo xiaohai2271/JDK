@@ -130,11 +130,11 @@ public E remove(int index) {
 
 ## 类解读
 
-ArrayList每次扩容均扩大为原容量的150%，这一点可由**newCapacity(int)**函数知悉。
+- ArrayList每次扩容均扩大为原容量的150%，这一点可由` newCapacity(int)` 函数知悉。
 
-ArrayList 采用动态数组对象实现，随机读写速度非常快。
+- ArrayList 采用动态数组对象实现，随机读写速度非常快。
 
-ArrayList为非线程安全的，在对数据进行修改的时候没有使用synchronized来加同步锁保证数据互斥同步。
+- ArrayList为非线程安全的，在对数据进行修改的时候没有使用synchronized来加同步锁保证数据互斥同步。
 
-ArrayList 使用父类的AbstractList中的modCount属来进行记录数据修改的次数，如果在多线程中修改导致当前modCount和类记录的modCount不同，则报ConcurrentModificationException并发修改异常。上述内容在` forEach(Consumer<? super E>) `,` removeIf(....) `, ` replaceAll() ` , ` sort()` 等方法中有进行检查。
+- ArrayList 使用父类的AbstractList中的modCount属来进行记录数据修改的次数，如果在多线程中修改导致当前modCount和类记录的modCount不同，则报ConcurrentModificationException并发修改异常。上述内容在` forEach(Consumer<? super E>) `,` removeIf(....) `, ` replaceAll() ` , ` sort()` 等方法中有进行检查。
 
