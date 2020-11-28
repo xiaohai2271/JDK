@@ -14,9 +14,45 @@ public static native void arraycopy(Object src,  int  srcPos,
 
 于是我开始追踪虚拟机的代码执行，就有了下面的内容.......
 
-> 下载源代码，构建jdk编译调试环境 本篇暂不作介绍
+> 下载源代码，构建JDK编译调试环境 本篇暂不作介绍
 
-## 0x00 定位native方法的申明位置
+## 0x000  测试代码
+
+```java
+import java.util.Arrays;
+
+class TestObj {
+	private int id;
+	
+	public TestObj(int id){
+		this.id = id;
+	}
+	
+	public String toString(){
+		return "Test Object "+this.id;
+	}
+}
+
+public class Test {
+
+	public static void main(String [] args){
+
+		System.out.println("基本类型\n");
+		int arr1[] = {1,2,3,4};
+		System.arraycopy(arr1,0,arr1,1,2);
+		System.out.println(Arrays.toString(arr1));
+		
+		System.out.println("对象类型\n");
+		TestObj arr2[] = {new TestObj(1),new TestObj(2),new TestObj(3),new TestObj(4)};
+		System.arraycopy(arr2,0,arr2,1,2);
+		System.out.println(Arrays.toString(arr2));
+	}
+}
+```
+
+
+
+## 0x001 定位native方法的申明位置
 
 此方法位于System类，而System类又处于java.base中的java.lang包下。于是我们可以很容易的找到` src/java.base/share/native/libjava/System.c`文件，在该文件中我们可以看到
 
@@ -59,7 +95,7 @@ JVM_END
 
 - `src/hotspot/share/oops/objArrayKlass.cpp`
 
-```java
+```c++
 void TypeArrayKlass::copy_array(arrayOop s, int src_pos, arrayOop d, int dst_pos, int length, TRAPS) {
   assert(s->is_typeArray(), "must be type array");
 
@@ -133,7 +169,7 @@ void TypeArrayKlass::copy_array(arrayOop s, int src_pos, arrayOop d, int dst_pos
 
 - `src/hotspot/share/oops/objArrayKlass.cpp` 
 
-```java
+```c++
 // Either oop or narrowOop depending on UseCompressedOops.
 void ObjArrayKlass::do_copy(arrayOop s, size_t src_offset,
                             arrayOop d, size_t dst_offset, int length, TRAPS) {
@@ -251,4 +287,117 @@ void ObjArrayKlass::copy_array(arrayOop s, int src_pos, arrayOop d,
 通过两源文件的名字我们大致可以猜到一个针对类型数组，一个针对对象数组。简单的阅读源码我们可以找到
 
 typeArrayKlass调用ArrayAccess类中的静态函数arraycopy，而objArrayKlass调用的则是oop_arraycopy。
+
+### 定位基本数据类型的拷贝函数位置
+
+经过打的log我们可以得到如下的运行截图
+
+![image-20201128112758165](pic/System.arraycopy/image-20201128112758165.png)
+
+然后经过层层调用我们可以来到这个`src/hotspot/share/utilities/copy.cpp`的方法中
+
+`src/hotspot/share/utilities/copy.cpp`中的代码如下
+
+```c++
+// Copy bytes; larger units are filled atomically if everything is aligned.
+void Copy::conjoint_memory_atomic(const void* from, void* to, size_t size) {
+  uintptr_t bits = (uintptr_t) from | (uintptr_t) to | (uintptr_t) size;
+
+  // (Note:  We could improve performance by ignoring the low bits of size,
+  // and putting a short cleanup loop after each bulk copy loop.
+  // There are plenty of other ways to make this faster also,
+  // and it's a slippery slope.  For now, let's keep this code simple
+  // since the simplicity helps clarify the atomicity semantics of
+  // this operation.  There are also CPU-specific assembly versions
+  // which may or may not want to include such optimizations.)
+
+  if (bits % sizeof(jlong) == 0) {
+    Copy::conjoint_jlongs_atomic((const jlong*) from, (jlong*) to, size / sizeof(jlong));
+  } else if (bits % sizeof(jint) == 0) {
+    Copy::conjoint_jints_atomic((const jint*) from, (jint*) to, size / sizeof(jint));
+  } else if (bits % sizeof(jshort) == 0) {
+    Copy::conjoint_jshorts_atomic((const jshort*) from, (jshort*) to, size / sizeof(jshort));
+  } else {
+    // Not aligned, so no need to be atomic.
+    Copy::conjoint_jbytes((const void*) from, (void*) to, size);
+  }
+}
+```
+
+可以看到在代码中这里有对基本类型进行判断，然后调用对于的拷贝方法.我们找到实现方法如下
+
+```c++
+void _Copy_conjoint_jshorts_atomic(const jshort* from, jshort* to, size_t count) {
+  if (from > to) {
+    const jshort *end = from + count;
+    while (from < end)
+      *(to++) = *(from++);
+  }
+  else if (from < to) {
+    const jshort *end = from;
+    from += count - 1;
+    to   += count - 1;
+    while (from >= end)
+      *(to--) = *(from--);
+  }
+}
+void _Copy_conjoint_jints_atomic(const jint* from, jint* to, size_t count) {
+  if (from > to) {
+    const jint *end = from + count;
+    while (from < end)
+      *(to++) = *(from++);
+  }
+  else if (from < to) {
+    const jint *end = from;
+    from += count - 1;
+    to   += count - 1;
+    while (from >= end)
+      *(to--) = *(from--);
+  }
+}
+void _Copy_conjoint_jlongs_atomic(const jlong* from, jlong* to, size_t count) {
+  if (from > to) {
+    const jlong *end = from + count;
+    while (from < end)
+      os::atomic_copy64(from++, to++);
+  }
+  else if (from < to) {
+    const jlong *end = from;
+    from += count - 1;
+    to   += count - 1;
+    while (from >= end)
+      os::atomic_copy64(from--, to--);
+  }
+}
+```
+
+基本数据类型就到此。接下来我们来看对象数据类型
+
+### 定位对象数据类型的拷贝函数位置
+
+找到打的log我们可以得到如下的内容
+
+![image-20201128113108524](pic/System.arraycopy/image-20201128113108524.png)
+
+最终我们可以定位到各操作系统实现的逻辑，其中一个如下
+
+![image-20201128115617701](pic/System.arraycopy/image-20201128115617701.png)
+
+可以看到调用汇编指令来完成,对于不同的操作系统由不同的指令来完成。
+
+## 0x002 代码分析
+
+**区分拷贝的数据类型**
+
+​		本次最初的测试用例并非是有基本类型和对象类型之分的，在逐步阅读源码的过程中发现有objArrayKlass和typeArrayKlass之分时，才大致猜到底层对于不同的数据类型有不同的实现，所以我才逐步完善测试例。
+
+**性能问题**
+
+ 		从一开始接触这个方法我就在思考通过如此大的周折实现的数组拷贝为什么会带来性能上的提升呢？现在也许我已经有了答案.
+
+- JIT不太可能像手动编写的C代码那样生成高效的低级代码。使用低级C可以实现很多优化，而这些优化对于通用JIT编译器几乎是不可能的。
+
+- native代码可以忽略或消除Object数组与基本数组之间的差异。Java无法做到这一点，至少没有效率。
+
+- 在native代码中，可以使用单个`memcpy`/`memmove`,来完成，这与*n个*不同的复制操作`memmove`相反。性能差异很大。
 
